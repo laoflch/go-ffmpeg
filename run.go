@@ -144,6 +144,18 @@ func _getOutputArgs(node *Node, streamNameMap map[string]string) []string {
 		args = append(args, "-video_size", kwargs.PopString("video_size"))
 	}
 
+	//modify by laoflch suport multi map options
+
+	if kwargs.HasKey("video_map") {
+		args = append(args, "-map", kwargs.PopString("video_map"))
+	}
+	if kwargs.HasKey("audio_map") {
+		args = append(args, "-map", kwargs.PopString("audio_map"))
+	}
+	if kwargs.HasKey("subtitle_map") {
+		args = append(args, "-map", kwargs.PopString("subtitle_map"))
+	}
+
 	args = append(args, ConvertKwargsToCmdLineArgs(kwargs)...)
 	args = append(args, filename)
 	return args
@@ -268,6 +280,26 @@ func (s *Stream) Compile(options ...CompilationOption) *exec.Cmd {
 	return cmd
 }
 
+// for test
+func (s *Stream) CompileWithBin(ffmpeg_bin string, options ...CompilationOption) *exec.Cmd {
+	args := s.GetArgs()
+	cmd := exec.CommandContext(s.Context, ffmpeg_bin, args...)
+	if a, ok := s.Context.Value("Stdin").(io.Reader); ok {
+		cmd.Stdin = a
+	}
+	if a, ok := s.Context.Value("Stdout").(io.Writer); ok {
+		cmd.Stdout = a
+	}
+	if a, ok := s.Context.Value("Stderr").(io.Writer); ok {
+		cmd.Stderr = a
+	}
+	for _, option := range options {
+		option(s, cmd)
+	}
+	log.Printf("compiled command: ffmpeg %s\n", strings.Join(args, " "))
+	return cmd
+}
+
 func (s *Stream) Run(options ...CompilationOption) error {
 	if s.Context.Value("run_hook") != nil {
 		hook := s.Context.Value("run_hook").(*RunHook)
@@ -280,4 +312,18 @@ func (s *Stream) Run(options ...CompilationOption) error {
 		}()
 	}
 	return s.Compile(options...).Run()
+}
+
+func (s *Stream) RunWithBin(ffmpeg_bin string, options ...CompilationOption) error {
+	if s.Context.Value("run_hook") != nil {
+		hook := s.Context.Value("run_hook").(*RunHook)
+		go hook.f()
+		defer func() {
+			if hook.closer != nil {
+				_ = hook.closer.Close()
+			}
+			<-hook.done
+		}()
+	}
+	return s.CompileWithBin(ffmpeg_bin, options...).Run()
 }
