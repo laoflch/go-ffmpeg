@@ -296,7 +296,7 @@ func (s *Stream) CompileWithBin(ffmpeg_bin string, options ...CompilationOption)
 	for _, option := range options {
 		option(s, cmd)
 	}
-	log.Printf("compiled command: ffmpeg %s\n", strings.Join(args, " "))
+	log.Printf("compiled command: %s %s\n", ffmpeg_bin, strings.Join(args, " "))
 	return cmd
 }
 
@@ -326,4 +326,59 @@ func (s *Stream) RunWithBin(ffmpeg_bin string, options ...CompilationOption) err
 		}()
 	}
 	return s.CompileWithBin(ffmpeg_bin, options...).Run()
+}
+
+func (s *Stream) RunWithBinRtPid(ffmpeg_bin string, options ...CompilationOption) (*os.Process, error) {
+	if s.Context.Value("run_hook") != nil {
+		hook := s.Context.Value("run_hook").(*RunHook)
+		go hook.f()
+		defer func() {
+			if hook.closer != nil {
+				_ = hook.closer.Close()
+			}
+			<-hook.done
+		}()
+	}
+
+	cmd_run := s.CompileWithBin(ffmpeg_bin, options...)
+
+	if err := cmd_run.Run(); err != nil {
+
+		return nil, err
+
+	} else {
+		return cmd_run.Process, nil
+	}
+}
+
+func (s *Stream) RunWithBinCtx(ctx *context.Context, ffmpeg_bin string, options ...CompilationOption) error {
+	if s.Context.Value("run_hook") != nil {
+		hook := s.Context.Value("run_hook").(*RunHook)
+		go hook.f()
+		defer func() {
+			if hook.closer != nil {
+				_ = hook.closer.Close()
+			}
+			<-hook.done
+		}()
+	}
+	err_chan := make(chan error)
+	cmd_run := s.CompileWithBin(ffmpeg_bin, options...)
+
+	go func() {
+		if err := cmd_run.Run(); err != nil {
+			err_chan <- err
+		}
+	}()
+
+	select {
+	case <-(*ctx).Done():
+
+		//log.Printf("kill ffmpeg process with pid %d", cmd_run.Process.Pid)
+
+		return cmd_run.Process.Kill()
+	case e := <-err_chan:
+		// 本RPC调用失败，返回错误信息
+		return e
+	}
 }
