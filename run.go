@@ -300,6 +300,22 @@ func (s *Stream) CompileWithBin(ffmpeg_bin string, options ...CompilationOption)
 	return cmd
 }
 
+// for test
+func FFplayCompileWithBin(ctx *context.Context, ffplay_bin string, args *[]string) *exec.Cmd {
+	cmd := exec.CommandContext(*ctx, ffplay_bin, (*args)...)
+	if a, ok := (*ctx).Value("Stdin").(io.Reader); ok {
+		cmd.Stdin = a
+	}
+	if a, ok := (*ctx).Value("Stdout").(io.Writer); ok {
+		cmd.Stdout = a
+	}
+	if a, ok := (*ctx).Value("Stderr").(io.Writer); ok {
+		cmd.Stderr = a
+	}
+	log.Printf("compiled command: %s %s\n", ffplay_bin, strings.Join(*args, " "))
+	return cmd
+}
+
 func (s *Stream) Run(options ...CompilationOption) error {
 	if s.Context.Value("run_hook") != nil {
 		hook := s.Context.Value("run_hook").(*RunHook)
@@ -364,6 +380,28 @@ func (s *Stream) RunWithBinCtx(ctx *context.Context, ffmpeg_bin string, options 
 	}
 	err_chan := make(chan error)
 	cmd_run := s.CompileWithBin(ffmpeg_bin, options...)
+
+	go func() {
+		if err := cmd_run.Run(); err != nil {
+			err_chan <- err
+		}
+	}()
+
+	select {
+	case <-(*ctx).Done():
+
+		//log.Printf("kill ffmpeg process with pid %d", cmd_run.Process.Pid)
+
+		return cmd_run.Process.Kill()
+	case e := <-err_chan:
+		// 本RPC调用失败，返回错误信息
+		return e
+	}
+}
+
+func RunFFplayWithBinCtx(ctx *context.Context, ffplay_bin string, args *[]string) error {
+	err_chan := make(chan error)
+	cmd_run := FFplayCompileWithBin(ctx, ffplay_bin, args)
 
 	go func() {
 		if err := cmd_run.Run(); err != nil {
