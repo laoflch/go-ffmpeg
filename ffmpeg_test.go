@@ -356,6 +356,14 @@ func printGraph(s *Stream) {
 	fmt.Println(v)
 }
 
+func TestPushStreamRtspNative(t *testing.T) {
+
+	if err := PushStreamRtspNative("/media/laoflch/48ac2b63-f97e-4a9c-b8db-d3ff5d08e5c2/video/movie/output/Detective.vs.Sleuths.2022.1080p.WEB-DL.x264.DDP5.1-laoflch.mkv", "rtsp://127.0.0.1:554/test"); err != nil {
+		t.Log(err.Error())
+	}
+
+}
+
 //func TestAvFoundation(t *testing.T) {
 //	out := Input("default:none", KwArgs{"f": "avfoundation", "framerate": "30"}).
 //		Output("output.mp4", KwArgs{"format": "mp4"}).
